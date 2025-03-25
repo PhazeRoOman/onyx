@@ -85,7 +85,7 @@ class BambooHRConnector(LoadConnector, PollConnector):
         """Load necessary credentials for BambooHR."""
         self.bamboohr_client = BambooHRApiClient(
             subdomain=credentials["bamboohr_subdomain"],
-            api_key=credentials["bamboohr_api_key"],
+            api_key=credentials["bamboohr_api_token"],
         )
         return None
 

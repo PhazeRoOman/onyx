@@ -392,6 +392,98 @@ export const connectorConfigs: Record<
     values: [],
     advanced_values: [],
   },
+  bamboohr: {
+    description: "Configure BambooHR connector",
+    subtext: `Filter which BambooHR content to index. You can index everything or specify a certain field.`,
+    values: [
+      {
+        type: "tab",
+        name: "indexing_scope",
+        label: "What should we index from BambooHR?",
+        optional: true,
+        tabs: [
+          {
+            value: "everything",
+            label: "Everything",
+            fields: [
+              {
+                type: "string_tab",
+                label: "Everything",
+                name: "everything",
+                description:
+                  "This connector will index all BambooHR content the provided credentials have access to!"
+              },
+            ],
+          },
+          {
+            value: "filtered",
+            label: "Filtered Content",
+            fields: [
+              {
+                type: "list",
+                query: "Enter departments to include:",
+                label: "Departments",
+                name: "departments",
+                description: "Include only employees from specific departments",
+                optional: true,
+              },
+              {
+                type: "list",
+                query: "Enter job titles to include:",
+                label: "Job Titles",
+                name: "job_titles",
+                description: "Include only employees with specific job titles",
+                optional: true,
+              },
+              {
+                type: "list",
+                query: "Enter employment statuses to include:",
+                label: "Employment Status",
+                name: "employment_status",
+                description: "Filter by employment status (e.g., 'Active' or 'Inactive')",
+                optional: true,
+              },
+              {
+                type: "list",
+                query: "Enter file categories names to include:",
+                label: "File Categories",
+                name: "file_categories",
+                description: "Include only files from specific categories",
+                optional: true,
+              },
+            ],
+          },
+        ],
+        defaultTab: "everything",
+      },
+      {
+        type: "checkbox",
+        query: "Include files?",
+        label: "Include Files",
+        name: "include_files",
+        description: "Whether to index files from BambooHR",
+        optional: true,
+        default: true,
+      },
+      {
+        type: "text",
+        query: "Only include employees hired after date (YYYY-MM-DD):",
+        label: "Hire Date After",
+        name: "hire_date_after",
+        description: "Only include employees hired after this date (YYYY-MM-DD format)",
+        optional: true,
+      },
+      {
+        type: "text",
+        query: "Only include records updated after date (YYYY-MM-DD):",
+        label: "Updated Since",
+        name: "updated_since",
+        description: "Only include records updated after this date (YYYY-MM-DD format)",
+        optional: true,
+      },
+    ],
+    advanced_values: [],
+  },
   confluence: {
     description: "Configure Confluence connector",
     initialConnectorName: "cloud_name",
@@ -1422,6 +1514,8 @@ export interface GoogleDriveConfig {
 }
 
 export interface GmailConfig {}
+
+export interface BambooHrConfig {}
 
 export interface BookstackConfig {}
 

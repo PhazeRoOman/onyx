@@ -1,5 +1,6 @@
 import {
   AxeroIcon,
+  BambooHrIcon,
   BookstackIcon,
   ClickupIcon,
   ConfluenceIcon,
@@ -122,6 +123,12 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     category: SourceCategory.Wiki,
     docs: "https://docs.onyx.app/connectors/confluence",
     oauthSupported: true,
+  },
+  bamboohr: {
+    icon: BambooHrIcon,
+    displayName: "BambooHR",
+    category: SourceCategory.Other,
+    docs: "https://docs.onyx.app/connectors/bamboohr",
   },
   jira: {
     icon: JiraIcon,

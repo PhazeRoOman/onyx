@@ -45,6 +45,11 @@ export interface BookstackCredentialJson {
   bookstack_api_token_secret: string;
 }
 
+export interface BambooHRCredentialJson {
+  bamboohr_api_key: string;
+  bamboohr_subdomain: string;
+}
+
 export interface ConfluenceCredentialJson {
   confluence_username: string;
   confluence_access_token: string;
@@ -244,6 +249,10 @@ export const credentialTemplates: Record<ValidSources, any> = {
     bookstack_api_token_id: "",
     bookstack_api_token_secret: "",
   } as BookstackCredentialJson,
+  bamboohr: {
+    bamboohr_api_key: "",
+    bamboohr_subdomain: "",
+  } as BambooHRCredentialJson,
   confluence: {
     confluence_username: "",
     confluence_access_token: "",
@@ -378,6 +387,10 @@ export const credentialDisplayNames: Record<string, string> = {
   bookstack_base_url: "Bookstack Base URL",
   bookstack_api_token_id: "Bookstack API Token ID",
   bookstack_api_token_secret: "Bookstack API Token Secret",
+
+  // BambooHR
+  bamboohr_api_key: "BambooHR API Key",
+  bamboohr_subdomain: "BambooHR Subdomain",
 
   // Confluence
   confluence_username: "Confluence Username",

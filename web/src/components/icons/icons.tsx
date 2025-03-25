@@ -37,6 +37,7 @@ import {
 import { SiBookstack } from "react-icons/si";
 import Image, { StaticImageData } from "next/image";
 import jiraSVG from "../../../public/Jira.svg";
+import bambooHrIcon from "../../../public/BambooHR.png";
 import confluenceSVG from "../../../public/Confluence.svg";
 import deepseekSVG from "../../../public/Deepseek.svg";
 import openAISVG from "../../../public/Openai.svg";
@@ -1106,6 +1107,13 @@ export const ConfluenceIcon = ({
     className={`${className} -m-0.5`}
     src={confluenceSVG}
   />
+);
+
+export const BambooHrIcon = ({
+  size = 16,
+  className = defaultTailwindCSS,
+}: IconProps) => (
+  <LogoIcon size={size} className={className} src={bambooHrIcon} />
 );
 
 export const OCIStorageIcon = ({

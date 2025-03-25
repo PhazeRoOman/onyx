@@ -353,6 +353,7 @@ export enum ValidSources {
   Gmail = "gmail",
   Bookstack = "bookstack",
   Confluence = "confluence",
+  BambooHR = "bamboohr",
   Jira = "jira",
   Productboard = "productboard",
   Slab = "slab",

@@ -144,6 +144,7 @@ class DocumentSource(str, Enum):
     GITLAB = "gitlab"
     GURU = "guru"
     BOOKSTACK = "bookstack"
+    BAMBOOHR = "bamboohr"
     CONFLUENCE = "confluence"
     SLAB = "slab"
     JIRA = "jira"

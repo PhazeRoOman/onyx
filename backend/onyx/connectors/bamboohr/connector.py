@@ -39,6 +39,7 @@ EMPLOYEE_DETAIL_FIELDS = [
     "hireDate",
     "status",
     "lastChanged",
+    "terminationDate",
 ]
 
 
@@ -52,7 +53,9 @@ class BambooHRConnector(LoadConnector, PollConnector):
         job_titles: Optional[List[str]] = None,
         employment_status: Optional[List[str]] = None,
         file_categories: Optional[List[str]] = None,
+        time_off_types: Optional[List[str]] = None,
         include_files: bool = True,
+        include_time_off: bool = True,
         hire_date_after: Optional[str] = None,
         updated_since: Optional[str] = None,
         indexing_scope: Optional[str] = "everything",
@@ -65,7 +68,9 @@ class BambooHRConnector(LoadConnector, PollConnector):
             job_titles: Filter employees by job titles
             employment_status: Filter employees by employment status
             file_categories: Filter documents by categories
+            time_off_types: Filter time-off records by type
             include_files: Whether to include files in the indexing
+            include_time_off: Whether to include time-off records in indexing
             hire_date_after: Only include employees hired after this date (YYYY-MM-DD)
             updated_since: Only include records updated after this date (YYYY-MM-DD)
             indexing_scope: Whether to index everything or use filters
@@ -75,7 +80,9 @@ class BambooHRConnector(LoadConnector, PollConnector):
         self.job_titles = job_titles or []
         self.employment_status = employment_status or []
         self.file_categories = file_categories or []
+        self.time_off_types = time_off_types or []
         self.include_files = include_files
+        self.include_time_off = include_time_off
         self.hire_date_after = hire_date_after
         self.updated_since = updated_since
         self.indexing_scope = indexing_scope
@@ -150,6 +157,10 @@ class BambooHRConnector(LoadConnector, PollConnector):
                 if field in details and details[field]:
                     formatted_field = field.replace("_", " ").title()
                     text += f"{formatted_field}: {details[field]}\n"
+            
+            # Add termination date if available
+            if "terminationDate" in details and details["terminationDate"]:
+                text += f"Termination Date: {details['terminationDate']}\n"
         
         # Determine the updated timestamp
         updated_at_str = None
@@ -160,16 +171,18 @@ class BambooHRConnector(LoadConnector, PollConnector):
         metadata = {
             "type": "employee",
             "employee_id": employee_id,
-            "department": employee.get("department") or "",  # Use empty string as default
-            "job_title": employee.get("jobTitle") or "",     # Use empty string as default
+            "department": employee.get("department") or "",
+            "job_title": employee.get("jobTitle") or "",
         }
         
         if details:
             metadata["status"] = details.get("status") or ""
             metadata["hire_date"] = details.get("hireDate") or ""
+            metadata["termination_date"] = details.get("terminationDate") or ""
         else:
             metadata["status"] = ""
             metadata["hire_date"] = ""
+            metadata["termination_date"] = ""
         
         return Document(
             id=f"bamboohr_employee_{employee_id}",
@@ -250,6 +263,49 @@ class BambooHRConnector(LoadConnector, PollConnector):
                     return False
             except (ValueError, TypeError):
                 # If date parsing fails, include the file
+                pass
+                
+        return True
+        
+    def _should_include_time_off(self, time_off_data: Dict[str, Any]) -> bool:
+        """Check if a time-off record should be included based on filters."""
+        # Skip if not including time-off records at all
+        if not self.include_time_off:
+            return False
+            
+        # Skip filter checking if indexing everything
+        if self.indexing_scope == "everything":
+            return True
+            
+        # Filter by time-off type - handle both string and dict format
+        if self.time_off_types:
+            time_off_type = ""
+            if isinstance(time_off_data.get("type"), dict):
+                time_off_type = time_off_data.get("type", {}).get("name", "")
+            else:
+                time_off_type = str(time_off_data.get("type", ""))
+                
+            if time_off_type not in self.time_off_types:
+                return False
+                
+        # Filter by updated date
+        if self.updated_since:
+            try:
+                # Check if status is a dict containing lastChanged
+                if isinstance(time_off_data.get("status"), dict) and "lastChanged" in time_off_data.get("status", {}):
+                    updated_date = time_str_to_utc(str(time_off_data["status"]["lastChanged"]))
+                elif time_off_data.get("lastModified"):
+                    updated_date = time_str_to_utc(str(time_off_data["lastModified"]))
+                else:
+                    # If no update info, default to creation date
+                    updated_date = time_str_to_utc(str(time_off_data.get("created")))
+                    
+                if updated_date:
+                    filter_date = datetime.strptime(self.updated_since, "%Y-%m-%d").timestamp()
+                    if updated_date < filter_date:
+                        return False
+            except (ValueError, TypeError):
+                # If date parsing fails, include the record
                 pass
                 
         return True
@@ -381,8 +437,8 @@ class BambooHRConnector(LoadConnector, PollConnector):
             "type": "file",
             "file_type": file_type,
             "file_name": title,
-            "category": file_data.get("category") or "",  # Use empty string as default
-            "owner": owner or "",  # Use empty string as default
+            "category": file_data.get("category") or "",
+            "owner": owner or "",
         }
         
         updated_at_str = str(file_data.get("lastUpdated")) if file_data.get("lastUpdated") else None
@@ -396,6 +452,191 @@ class BambooHRConnector(LoadConnector, PollConnector):
             doc_updated_at=time_str_to_utc(updated_at_str) if updated_at_str else None,
             metadata=metadata,
         )
+
+    def _time_off_to_document(
+        self,
+        bamboohr_client: BambooHRApiClient,
+        time_off_data: Dict[str, Any],
+        employee_name: Optional[str] = None
+    ) -> Document:
+        """Create a document from time-off data."""
+        time_off_id = str(time_off_data.get("id", ""))
+        employee_id = str(time_off_data.get("employeeId", ""))
+        employee_name = employee_name or time_off_data.get("name", "")
+        
+        # Extract type information - could be string or dict
+        time_off_type = ""
+        if isinstance(time_off_data.get("type"), dict):
+            time_off_type = time_off_data.get("type", {}).get("name", "")
+        else:
+            time_off_type = str(time_off_data.get("type", ""))
+        
+        # Build meaningful title
+        title = f"{employee_name} - {time_off_type or 'Time Off'}"
+        
+        url = bamboohr_client.build_app_url(f"/employees/timeoff/?id={employee_id}")
+        
+        # Format time-off data as text
+        text = f"Time Off Request: {title}\n"
+        text += f"Employee ID: {employee_id}\n"
+        text += f"Employee: {employee_name}\n"
+        
+        # Add time off details
+        text += f"Type: {time_off_type}\n"
+        text += f"Start Date: {time_off_data.get('start', '')}\n"
+        text += f"End Date: {time_off_data.get('end', '')}\n"
+        
+        # Extract amount information
+        if isinstance(time_off_data.get("amount"), dict):
+            amount_data = time_off_data.get("amount", {})
+            amount = amount_data.get("amount", "")
+            unit = amount_data.get("unit", "days")
+            if amount:
+                text += f"Amount: {amount} {unit}\n"
+        
+        # Extract status information
+        status = ""
+        if isinstance(time_off_data.get("status"), dict):
+            status = time_off_data.get("status", {}).get("status", "")
+        else:
+            status = str(time_off_data.get("status", ""))
+        
+        if status:
+            text += f"Status: {status}\n"
+        
+        # Extract notes information
+        if isinstance(time_off_data.get("notes"), dict):
+            notes_data = time_off_data.get("notes", {})
+            
+            employee_notes = notes_data.get("employee", "")
+            if employee_notes:
+                text += f"Employee Notes: {employee_notes}\n"
+                
+            manager_notes = notes_data.get("manager", "")
+            if manager_notes:
+                text += f"Manager Notes: {manager_notes}\n"
+        elif time_off_data.get("notes"):
+            text += f"Notes: {time_off_data.get('notes')}\n"
+        
+        metadata = {
+            "type": "time_off",
+            "employee_id": employee_id,
+            "time_off_type": time_off_type,
+            "status": status,
+            "start_date": time_off_data.get("start") or "",
+            "end_date": time_off_data.get("end") or "",
+        }
+        
+        # Get updated timestamp
+        updated_at_str = None
+        if isinstance(time_off_data.get("status"), dict) and "lastChanged" in time_off_data.get("status", {}):
+            updated_at_str = str(time_off_data["status"]["lastChanged"])
+        else:
+            updated_at_str = str(time_off_data.get("lastModified")) if time_off_data.get("lastModified") else None
+        
+        return Document(
+            id=f"bamboohr_time_off_{time_off_id}",
+            sections=[TextSection(link=url, text=text)],
+            source=DocumentSource.BAMBOOHR,
+            semantic_identifier=f"Time Off: {title}",
+            title=title,
+            doc_updated_at=time_str_to_utc(updated_at_str) if updated_at_str else None,
+            metadata=metadata,
+        )
+
+    def _get_time_off_batch(
+        self,
+        start: Optional[SecondsSinceUnixEpoch] = None,
+        end: Optional[SecondsSinceUnixEpoch] = None,
+        employees: Optional[List[Dict[str, Any]]] = None
+    ) -> List[Document]:
+        """Get time-off data from BambooHR.
+
+        Args:
+            start: Start time for filtering
+            end: End time for filtering
+            employees: List of employee data for reference
+
+        Returns:
+            List of time-off documents
+        """
+        if not self.bamboohr_client or not self.include_time_off:
+            return []
+        
+        logger.info("Fetching time-off data from BambooHR")
+        documents = []
+        
+        try:
+            # Create a mapping of employee IDs to names for easier lookup
+            employee_map = {}
+            if employees:
+                for employee in employees:
+                    if "id" in employee:
+                        first_name = employee.get("firstName", "")
+                        last_name = employee.get("lastName", "")
+                        name = f"{first_name} {last_name}".strip()
+                        employee_map[str(employee["id"])] = name
+            
+            # Construct date parameters for the API request
+            params = {}
+            
+            # Use the current year as default if no start/end filters provided
+            current_year = datetime.now().year
+            default_start = f"{current_year - 1}-01-01"
+            default_end = f"{current_year + 1}-12-31"
+            
+            if start:
+                # Convert timestamp to date string
+                start_date = datetime.fromtimestamp(start).strftime("%Y-%m-%d")
+                params["start"] = start_date
+            else:
+                params["start"] = default_start
+                
+            if end:
+                # Convert timestamp to date string
+                end_date = datetime.fromtimestamp(end).strftime("%Y-%m-%d")
+                params["end"] = end_date
+            else:
+                params["end"] = default_end
+            
+            # Fetch time-off records
+            response = self.bamboohr_client.get("time_off/requests", params)
+            
+            # Handle both possible response formats from the API
+            time_off_records = []
+            if isinstance(response, list):
+                # API returned a list of time-off records directly
+                time_off_records = response
+            elif isinstance(response, dict):
+                # API returned a dict with a "requests" key containing the records
+                time_off_records = response.get("requests", [])
+            
+            # Process each time-off record
+            for record in time_off_records:
+                # Apply filters
+                if not self._should_include_time_off(record):
+                    continue
+                    
+                # Get employee name if available
+                employee_id = str(record.get("employeeId", ""))
+                employee_name = employee_map.get(employee_id)
+                
+                # Create document
+                document = self._time_off_to_document(
+                    bamboohr_client=self.bamboohr_client,
+                    time_off_data=record,
+                    employee_name=employee_name
+                )
+                documents.append(document)
+                
+                # Avoid rate limiting
+                time.sleep(0.1)
+                
+            return documents
+            
+        except Exception as e:
+            logger.error(f"Error fetching time-off data: {e}")
+            return []
 
     def _get_employees_batch(
         self,
@@ -779,6 +1020,21 @@ class BambooHRConnector(LoadConnector, PollConnector):
             for i in range(0, len(company_file_docs), self.batch_size):
                 batch = company_file_docs[i:i+self.batch_size]
                 yield batch
+                
+        # Get time-off records if needed
+        if self.include_time_off:
+            # Fetch all employees for the name mapping
+            try:
+                employee_directory = self.bamboohr_client.get("employees/directory", {"fields": ",".join(DIRECTORY_FIELDS)})
+                time_off_docs = self._get_time_off_batch(start, end, employees=employee_directory.get("employees", []))
+            except Exception as e:
+                logger.warning(f"Error fetching employee directory for time-off records: {e}")
+                time_off_docs = self._get_time_off_batch(start, end)
+            
+            # Process in batches
+            for i in range(0, len(time_off_docs), self.batch_size):
+                batch = time_off_docs[i:i+self.batch_size]
+                yield batch
 
     def validate_connector_settings(self) -> None:
         """
@@ -822,7 +1078,9 @@ class BambooHRConnector(LoadConnector, PollConnector):
             "job_titles": self.job_titles,
             "employment_status": self.employment_status,
             "file_categories": self.file_categories,
+            "time_off_types": self.time_off_types,
             "include_files": self.include_files,
+            "include_time_off": self.include_time_off,
             "hire_date_after": self.hire_date_after,
             "updated_since": self.updated_since,
         }

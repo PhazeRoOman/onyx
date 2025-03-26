@@ -87,6 +87,7 @@ class BambooHRConnector(LoadConnector, PollConnector):
         self.updated_since = updated_since
         self.indexing_scope = indexing_scope
         self.bamboohr_client: Optional[BambooHRApiClient] = None
+        self.company_name: Optional[str] = None
 
     def load_credentials(self, credentials: Dict[str, Any]) -> Dict[str, Any] | None:
         """Load necessary credentials for BambooHR."""
@@ -94,6 +95,10 @@ class BambooHRConnector(LoadConnector, PollConnector):
             subdomain=credentials["bamboohr_subdomain"],
             api_key=credentials["bamboohr_api_token"],
         )
+        
+        # Fetch company name
+        self.company_name = credentials["bamboohr_subdomain"]
+        
         return None
 
     def _fetch_employee_details(self, employee_id: str) -> Dict[str, Any]:
@@ -141,7 +146,8 @@ class BambooHRConnector(LoadConnector, PollConnector):
         url = bamboohr_client.build_app_url(f"/employees/employee.php?id={employee_id}")
         
         # Format employee data as text
-        text = f"Employee: {name}\n"
+        text = f"Company: {self.company_name}\n"  # Add company name
+        text += f"Employee: {name}\n"
         text += f"ID: {employee_id}\n"
         
         # Include standard fields from directory
@@ -170,6 +176,7 @@ class BambooHRConnector(LoadConnector, PollConnector):
         # Prepare metadata from both sources with default empty strings to avoid None values
         metadata = {
             "type": "employee",
+            "company": self.company_name,  # Add company name to metadata
             "employee_id": employee_id,
             "department": employee.get("department") or "",
             "job_title": employee.get("jobTitle") or "",
@@ -188,8 +195,8 @@ class BambooHRConnector(LoadConnector, PollConnector):
             id=f"bamboohr_employee_{employee_id}",
             sections=[TextSection(link=url, text=text)],
             source=DocumentSource.BAMBOOHR,
-            semantic_identifier=f"Employee: {name}",
-            title=name,
+            semantic_identifier=f"Employee: {name} - {self.company_name}",  # Include company in identifier
+            title=f"{name} - {self.company_name}",  # Include company in title
             doc_updated_at=time_str_to_utc(updated_at_str) if updated_at_str else None,
             metadata=metadata,
         )
@@ -396,8 +403,8 @@ class BambooHRConnector(LoadConnector, PollConnector):
             logger.error(f"Unexpected error processing XML for company files: {e}")
             return []
 
-    @staticmethod
     def _file_to_document(
+        self,
         bamboohr_client: BambooHRApiClient, 
         file_data: Dict[str, Any], 
         content: str, 
@@ -425,7 +432,8 @@ class BambooHRConnector(LoadConnector, PollConnector):
         else:
             url = bamboohr_client.build_app_url("/files")
         
-        text = f"File: {title}\n"
+        text = f"Company: {self.company_name}\n"  # Add company name
+        text += f"File: {title}\n"
         if owner:
             text += f"Owner: {owner}\n"
         if file_data.get("category"):
@@ -435,6 +443,7 @@ class BambooHRConnector(LoadConnector, PollConnector):
         # Ensure no None values in metadata
         metadata = {
             "type": "file",
+            "company": self.company_name,  # Add company to metadata
             "file_type": file_type,
             "file_name": title,
             "category": file_data.get("category") or "",
@@ -442,13 +451,15 @@ class BambooHRConnector(LoadConnector, PollConnector):
         }
         
         updated_at_str = str(file_data.get("lastUpdated")) if file_data.get("lastUpdated") else None
-            
+        
+        file_title = f"{title} - {self.company_name}"  # Include company in title
+        
         return Document(
             id=f"bamboohr_{file_type}_file_{file_id}",
             sections=[TextSection(link=url, text=text)],
             source=DocumentSource.BAMBOOHR,
-            semantic_identifier=f"File: {title}",
-            title=title,
+            semantic_identifier=f"File: {file_title}",
+            title=file_title,
             doc_updated_at=time_str_to_utc(updated_at_str) if updated_at_str else None,
             metadata=metadata,
         )
@@ -477,7 +488,8 @@ class BambooHRConnector(LoadConnector, PollConnector):
         url = bamboohr_client.build_app_url(f"/employees/timeoff/?id={employee_id}")
         
         # Format time-off data as text
-        text = f"Time Off Request: {title}\n"
+        text = f"Company: {self.company_name}\n"  # Add company name
+        text += f"Time Off Request: {title}\n"
         text += f"Employee ID: {employee_id}\n"
         text += f"Employee: {employee_name}\n"
         
@@ -520,6 +532,7 @@ class BambooHRConnector(LoadConnector, PollConnector):
         
         metadata = {
             "type": "time_off",
+            "company": self.company_name,  # Add company to metadata
             "employee_id": employee_id,
             "time_off_type": time_off_type,
             "status": status,
@@ -534,12 +547,14 @@ class BambooHRConnector(LoadConnector, PollConnector):
         else:
             updated_at_str = str(time_off_data.get("lastModified")) if time_off_data.get("lastModified") else None
         
+        full_title = f"{title} - {self.company_name}"  # Include company in title
+        
         return Document(
             id=f"bamboohr_time_off_{time_off_id}",
             sections=[TextSection(link=url, text=text)],
             source=DocumentSource.BAMBOOHR,
-            semantic_identifier=f"Time Off: {title}",
-            title=title,
+            semantic_identifier=f"Time Off: {title} - {self.company_name}",  # Include company in identifier
+            title=full_title,
             doc_updated_at=time_str_to_utc(updated_at_str) if updated_at_str else None,
             metadata=metadata,
         )

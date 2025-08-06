@@ -10,7 +10,7 @@ safetensors==0.4.2
 sentence-transformers==3.4.1
 setfit==1.1.1
 torch==2.2.0
-transformers==4.49.0
+transformers==4.53.0
 uvicorn==0.21.1
 voyageai==0.2.3
 litellm==1.61.16

@@ -31,7 +31,7 @@ jira==3.5.1
 jsonref==1.1.0
 trafilatura==1.12.2
 langchain==0.3.7
-langchain-core==0.3.24
+langchain-core==0.3.81
 langchain-openai==0.2.9
 langchain-text-splitters==0.3.2
 langchainhub==0.1.21
